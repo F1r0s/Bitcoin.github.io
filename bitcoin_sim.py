@@ -2,13 +2,13 @@ import numpy as np
 import pandas as pd
 import random
 
-def simulate_bitcoin_prices(days=60, initial_price=65000, mu=0.0005, sigma=0.04):
+def simulate_stock_prices(days=60, initial_price=150, mu=0.0005, sigma=0.04):
     """
-    Simulates Bitcoin price data using Geometric Brownian Motion.
+    Simulates Stock price data using Geometric Brownian Motion.
 
     Args:
         days (int): Number of days to simulate.
-        initial_price (float): Starting price of Bitcoin.
+        initial_price (float): Starting price of Stock.
         mu (float): Drift parameter (daily return).
         sigma (float): Volatility parameter (daily standard deviation).
 
@@ -41,16 +41,16 @@ def calculate_moving_averages(df):
     df['SMA_30'] = df['Price'].rolling(window=30).mean()
     return df
 
-def run_trading_strategy(df, initial_cash=100000):
+def run_trading_strategy(df, initial_cash=100000, fee_pct=0.001):
     """
     Implements the Golden Cross trading algorithm.
     """
     cash = initial_cash
-    btc_holdings = 0
+    stock_holdings = 0
     portfolio_values = []
 
-    print(f"{'Day':<5} {'Price':<10} {'SMA_7':<10} {'SMA_30':<10} {'Action':<10} {'Portfolio Value':<15} {'Holdings (BTC)':<15} {'Cash':<15}")
-    print("-" * 95)
+    print(f"{'Day':<5} {'Price':<10} {'SMA_7':<10} {'SMA_30':<10} {'Action':<10} {'Portfolio Value':<15} {'Holdings (Shares)':<18} {'Cash':<15} {'Cost':<10}")
+    print("-" * 110)
 
     # We need to iterate through the DataFrame.
     # Since we need previous values to detect crossover, we can just track state.
@@ -59,7 +59,7 @@ def run_trading_strategy(df, initial_cash=100000):
     #   - If SMA_7 > SMA_30 and we don't have BTC -> BUY
     #   - If SMA_7 < SMA_30 and we have BTC -> SELL
 
-    position = "CASH" # CASH or BTC
+    position = "CASH" # CASH or STOCK
 
     ledger = []
 
@@ -70,30 +70,36 @@ def run_trading_strategy(df, initial_cash=100000):
         sma_30 = row['SMA_30']
 
         action = "HOLD"
+        transaction_cost = 0.0
 
         # We can only trade if we have both MAs
         if not pd.isna(sma_7) and not pd.isna(sma_30):
             if sma_7 > sma_30 and position == "CASH":
                 # Buy Signal (Golden Cross)
-                btc_holdings = cash / price
+                cost = cash * fee_pct
+                transaction_cost = cost
+                stock_holdings = (cash - cost) / price
                 cash = 0
-                position = "BTC"
+                position = "STOCK"
                 action = "BUY"
-            elif sma_7 < sma_30 and position == "BTC":
+            elif sma_7 < sma_30 and position == "STOCK":
                 # Sell Signal (Death Cross)
-                cash = btc_holdings * price
-                btc_holdings = 0
+                gross_proceeds = stock_holdings * price
+                cost = gross_proceeds * fee_pct
+                transaction_cost = cost
+                cash = gross_proceeds - cost
+                stock_holdings = 0
                 position = "CASH"
                 action = "SELL"
 
-        current_value = cash + (btc_holdings * price)
+        current_value = cash + (stock_holdings * price)
         portfolio_values.append(current_value)
 
         # Formatting for display
         sma_7_str = f"{sma_7:.2f}" if not pd.isna(sma_7) else "NaN"
         sma_30_str = f"{sma_30:.2f}" if not pd.isna(sma_30) else "NaN"
 
-        print(f"{day:<5} ${price:<9.2f} ${sma_7_str:<9} ${sma_30_str:<9} {action:<10} ${current_value:<14.2f} {btc_holdings:<15.4f} ${cash:<14.2f}")
+        print(f"{day:<5} ${price:<9.2f} ${sma_7_str:<9} ${sma_30_str:<9} {action:<10} ${current_value:<14.2f} {stock_holdings:<18.4f} ${cash:<14.2f} ${transaction_cost:<9.2f}")
 
         ledger.append({
             'Day': day,
@@ -101,7 +107,8 @@ def run_trading_strategy(df, initial_cash=100000):
             'SMA_7': sma_7,
             'SMA_30': sma_30,
             'Action': action,
-            'Portfolio Value': current_value
+            'Portfolio Value': current_value,
+            'Transaction Cost': transaction_cost
         })
 
     # Final summary
@@ -122,8 +129,8 @@ if __name__ == "__main__":
     # we might want to simulate more than 60 days, but the prompt says "simulates 60 days".
     # So I will simulate exactly 60 days. The 30-day MA will only appear on day 30.
     # This leaves 30 days for trading.
-    print("Simulating 60 days of Bitcoin price data...")
-    df = simulate_bitcoin_prices(days=60, initial_price=65000)
+    print("Simulating 60 days of Stock price data...")
+    df = simulate_stock_prices(days=60, initial_price=150)
 
     # 2. Calculate MAs
     df = calculate_moving_averages(df)
